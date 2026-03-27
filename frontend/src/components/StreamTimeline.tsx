@@ -1,5 +1,6 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { getStreamHistory, listAllEvents, StreamEvent } from "../services/api";
+import { CopyableAddress } from "./CopyableAddress";
 
 interface StreamTimelineProps {
   streamId?: string;
@@ -22,7 +23,22 @@ export function StreamTimeline({ streamId }: StreamTimelineProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-
+  const loadHistory = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      if (streamId) {
+        const data = await getStreamHistory(streamId);
+        setEvents(data);
+      } else {
+        const data = await listAllEvents();
+        setEvents(data);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load history.");
+    } finally {
+      setLoading(false);
+    }
   }, [streamId]);
 
   useEffect(() => {
@@ -31,23 +47,85 @@ export function StreamTimeline({ streamId }: StreamTimelineProps) {
 
   function getEventIcon(eventType: string): string {
     switch (eventType) {
-
+      case "created":
+        return "✨";
+      case "claimed":
+        return "💰";
+      case "canceled":
+        return "⏹️";
+      case "start_time_updated":
+        return "⏰";
+      default:
+        return "📝";
     }
   }
 
-  function getEventDescription(event: StreamEvent): string {
-    const actor = event.actor ? `${event.actor.slice(0, 6)}...${event.actor.slice(-4)}` : "Unknown";
+  function getEventDescription(event: StreamEvent): React.ReactNode {
+    const actor = event.actor ? (
+      <CopyableAddress address={event.actor} />
+    ) : (
+      "Unknown"
+    );
     switch (event.eventType) {
       case "created":
-        return `Initiated by ${actor} for ${event.amount} tokens`;
+        return (
+          <>
+            Initiated by {actor} for {event.amount} tokens
+          </>
+        );
       case "claimed":
-        return `Claim of ${event.amount} tokens processed by ${actor}`;
+        return (
+          <>
+            Claim of {event.amount} tokens processed by {actor}
+          </>
+        );
       case "canceled":
-        return `Closed by ${actor}`;
+        return <>Closed by {actor}</>;
       case "start_time_updated":
-        return `New start time set by ${actor}`;
+        return <>New start time set by {actor}</>;
       default:
-        return `Action performed by ${actor}`;
+        return <>Action performed by {actor}</>;
     }
   }
 
+  if (loading) {
+    return (
+      <div className="muted" style={{ padding: "1rem" }}>
+        Loading activity history...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div
+        className="activity-error"
+        style={{ color: "var(--color-text-error)", padding: "1rem" }}
+      >
+        ⚠️ {error}
+      </div>
+    );
+  }
+
+  if (events.length === 0) {
+    return (
+      <div className="muted" style={{ padding: "1rem" }}>
+        No events found for this stream.
+      </div>
+    );
+  }
+
+  return (
+    <div className="activity-feed">
+      {events.map((event) => (
+        <div key={event.id} className="activity-item">
+          <div className="activity-icon">{getEventIcon(event.eventType)}</div>
+          <div className="activity-content">
+            <div className="activity-desc">{getEventDescription(event)}</div>
+            <div className="muted">{timeAgo(event.timestamp)}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
