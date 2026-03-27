@@ -5,7 +5,6 @@ import express, { Request, Response } from "express";
 import swaggerUi from "swagger-ui-express";
 import { z } from "zod";
 import { swaggerDocument } from "./swagger";
-import { getStreamHistory, getAllEvents, getGlobalEvents, countAllEvents } from "./services/eventHistory";
 
 import { fetchOpenIssues } from "./services/openIssues";
 import { initIndexer, startIndexer } from "./services/indexer";
@@ -383,6 +382,33 @@ app.get("/api/streams/:id/history", (req: Request, res: Response) => {
   res.json({ data: getStreamHistory(parsedId.value) });
 });
 
+app.get("/api/streams/:id/snapshot", (req: Request, res: Response) => {
+  const parsedId = parseStreamId(req.params.id);
+  if (!parsedId.ok) {
+    sendValidationError(res, parsedId.issues);
+    return;
+  }
+
+  const stream = getStream(parsedId.value);
+  if (!stream) {
+    res.status(404).json({ error: "Stream not found.", requestId: req.requestId });
+    return;
+  }
+
+  const progress = calculateProgress(stream);
+  const history = getStreamHistory(parsedId.value);
+
+  res.json({
+    data: {
+      stream: {
+        ...stream,
+        progress,
+      },
+      history,
+    },
+  });
+});
+
 app.get("/api/open-issues", async (_req: Request, res: Response) => {
   try {
     const data = await fetchOpenIssues();
@@ -393,23 +419,27 @@ app.get("/api/open-issues", async (_req: Request, res: Response) => {
   }
 });
 
+app.get("/api/events", (_req: Request, res: Response) => {
+  res.json({ data: getAllEvents(50) });
+});
+
 
 async function startServer() {
   await initSoroban();
   await syncStreams();
-  
+
   // Initialize and start event indexer
   const rpcUrl = process.env.RPC_URL || "https://soroban-testnet.stellar.org:443";
   const contractId = process.env.CONTRACT_ID;
   const networkPassphrase = process.env.NETWORK_PASSPHRASE;
-  
+
   if (contractId) {
     initIndexer(rpcUrl, contractId, networkPassphrase);
     startIndexer(10000); // Poll every 10 seconds
   } else {
     console.warn("CONTRACT_ID not set, event indexer will not start");
   }
-  
+
   app.listen(port, () => {
     console.log(`StellarStream API listening on http://localhost:${port}`);
   });

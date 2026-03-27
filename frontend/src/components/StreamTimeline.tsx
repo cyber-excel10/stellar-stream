@@ -1,8 +1,20 @@
-import { useEffect, useState } from "react";
-import { getStreamHistory, StreamEvent } from "../services/api";
+import { useEffect, useState, useCallback, useMemo } from "react";
+import { getStreamHistory, listAllEvents, StreamEvent } from "../services/api";
 
 interface StreamTimelineProps {
-  streamId: string;
+  streamId?: string;
+}
+
+/** Simple "time ago" formatter */
+function timeAgo(timestamp: number): string {
+  const seconds = Math.floor(Date.now() / 1000 - timestamp);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 }
 
 export function StreamTimeline({ streamId }: StreamTimelineProps) {
@@ -10,90 +22,32 @@ export function StreamTimeline({ streamId }: StreamTimelineProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadHistory();
+
   }, [streamId]);
 
-  async function loadHistory() {
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await getStreamHistory(streamId);
-      setEvents(data);
-    } catch (err: any) {
-      setError(err.message || "Failed to load stream history");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function formatTimestamp(timestamp: number): string {
-    return new Date(timestamp * 1000).toLocaleString();
-  }
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
 
   function getEventIcon(eventType: string): string {
     switch (eventType) {
-      case "created":
-        return "🎉";
-      case "claimed":
-        return "💰";
-      case "canceled":
-        return "❌";
-      case "start_time_updated":
-        return "⏰";
-      default:
-        return "📌";
+
     }
   }
 
   function getEventDescription(event: StreamEvent): string {
+    const actor = event.actor ? `${event.actor.slice(0, 6)}...${event.actor.slice(-4)}` : "Unknown";
     switch (event.eventType) {
       case "created":
-        return `Stream created by ${event.actor?.slice(0, 8)}... for ${event.amount} tokens`;
+        return `Initiated by ${actor} for ${event.amount} tokens`;
       case "claimed":
-        return `${event.actor?.slice(0, 8)}... claimed ${event.amount} tokens`;
+        return `Claim of ${event.amount} tokens processed by ${actor}`;
       case "canceled":
-        return `Stream canceled by ${event.actor?.slice(0, 8)}...`;
+        return `Closed by ${actor}`;
       case "start_time_updated":
-        return `Start time updated by ${event.actor?.slice(0, 8)}...`;
+        return `New start time set by ${actor}`;
       default:
-        return "Unknown event";
+        return `Action performed by ${actor}`;
     }
   }
 
-  if (loading) {
-    return <div className="text-gray-500">Loading history...</div>;
-  }
-
-  if (error) {
-    return <div className="text-red-500">Error: {error}</div>;
-  }
-
-  if (events.length === 0) {
-    return <div className="text-gray-500">No events found</div>;
-  }
-
-  return (
-    <div className="space-y-4">
-      <h3 className="text-lg font-semibold">Stream Timeline</h3>
-      <div className="space-y-3">
-        {events.map((event: StreamEvent) => (
-          <div
-            key={event.id}
-            className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200"
-          >
-            <div className="text-2xl">{getEventIcon(event.eventType)}</div>
-            <div className="flex-1">
-              <div className="font-medium text-gray-900">
-                {getEventDescription(event)}
-              </div>
-              <div className="text-sm text-gray-500">
-                {formatTimestamp(event.timestamp)}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
