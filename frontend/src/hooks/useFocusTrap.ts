@@ -61,13 +61,13 @@ export function useFocusTrap<T extends HTMLElement>(active: boolean) {
 
       if (e.shiftKey) {
         // Shift+Tab: if focus is on (or outside) the first element, wrap to last
-        if (!active || active === first || !container.contains(active)) {
+        if (!active || active === first || !container!.contains(active)) {
           e.preventDefault();
           last.focus();
         }
       } else {
         // Tab: if focus is on (or outside) the last element, wrap to first
-        if (!active || active === last || !container.contains(active)) {
+        if (!active || active === last || !container!.contains(active)) {
           e.preventDefault();
           first.focus();
         }

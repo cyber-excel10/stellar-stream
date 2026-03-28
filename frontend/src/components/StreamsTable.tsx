@@ -1,8 +1,8 @@
-import { useRef, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import { Stream } from "../types/stream";
 import { getExportCsvUrl, ListStreamsFilters } from "../services/api";
-import { StreamTimeline } from "./StreamTimeline";
 import { CopyableAddress } from "./CopyableAddress";
+import { StreamTimeline } from "./StreamTimeline";
 import { getHealthBadges } from "../utils/streamHealthBadges";
 
 interface StreamsTableProps {
@@ -16,13 +16,6 @@ interface StreamsTableProps {
    */
   onEditStartTime: (stream: Stream, triggerRef: React.RefObject<HTMLButtonElement | null>) => void;
 }
-
-const VALID_STATUSES = [
-  "active",
-  "scheduled",
-  "completed",
-  "canceled",
-] as const;
 
 function statusClass(status: Stream["progress"]["status"]): string {
   switch (status) {
@@ -41,36 +34,32 @@ function formatTimestamp(unixSeconds: number): string {
 export function StreamsTable({
   streams,
   filters,
-  onFiltersChange,
+  onFiltersChange: _onFiltersChange,
   onCancel,
   onEditStartTime,
 }: StreamsTableProps) {
-  const [expandedStreamId, setExpandedStreamId] = useState<string | null>(null);
   const exportUrl = getExportCsvUrl(filters as Record<string, string>);
+  const [expandedStreamId, setExpandedStreamId] = useState<string | null>(null);
 
   const toggleTimeline = (streamId: string) => {
     setExpandedStreamId((prev) => (prev === streamId ? null : streamId));
   };
 
-  const header = (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        marginBottom: "1rem",
-      }}
-    >
-      <h2 style={{ margin: 0 }}>Live Streams</h2>
-      <a href={exportUrl} className="btn-ghost" download>
-        Export CSV
-      </a>
-    </div>
-  );
-
   return (
     <div className="card">
-      {header}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: "1rem",
+        }}
+      >
+        <h2 style={{ margin: 0 }}>Live Streams</h2>
+        <a href={exportUrl} className="btn-ghost" download>
+          Export CSV
+        </a>
+      </div>
 
       {streams.length === 0 ? (
         <p className="muted">No streams match your filters.</p>
@@ -117,6 +106,7 @@ export function StreamsTable({
     </div>
   );
 }
+
 
 // ── StreamRow ─────────────────────────────────────────────────────────────
 // Extracted so each row can hold its own triggerRef without polluting the
@@ -252,3 +242,4 @@ function StreamRow({
     </>
   );
 }
+
