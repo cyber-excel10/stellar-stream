@@ -130,6 +130,13 @@ Response:
 Error:
 - `400` if account ID is invalid
 
+### `GET /api/assets`
+Purpose:
+- Fetch the current allowed asset allowlist
+
+Response:
+- `data: string[]` (normalized asset codes)
+
 ### `POST /api/streams`
 Purpose:
 - Create a new stream

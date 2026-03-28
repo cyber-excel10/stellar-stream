@@ -296,6 +296,33 @@ export const swaggerDocument = {
         },
       },
     },
+    "/api/assets": {
+      get: {
+        summary: "List allowed assets",
+        description: "Returns the normalized list of allowed asset codes.",
+        responses: {
+          "200": {
+            description: "Allowed assets list.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    data: {
+                      type: "array",
+                      items: {
+                        type: "string",
+                        example: "USDC",
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
     "/api/streams": {
       get: {
         summary: "List all streams",
