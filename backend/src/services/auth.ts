@@ -7,11 +7,14 @@ import {
 import jwt from "jsonwebtoken";
 import { Request, Response, NextFunction } from "express";
 
-const JWT_SECRET = process.env.JWT_SECRET || "default_local_dev_secret_key";
 const SERVER_SIGNING_KEY =
   process.env.SERVER_SIGNING_KEY || Keypair.random().secret(); // Generate random for dev if not set
 const DOMAIN = process.env.DOMAIN || "localhost";
 const NETWORK_PASSPHRASE = process.env.NETWORK_PASSPHRASE || Networks.TESTNET;
+
+function getJwtSecret() {
+  return process.env.JWT_SECRET || "default_local_dev_secret_key";
+}
 
 export interface AuthUser {
   accountId: string;
@@ -81,6 +84,7 @@ export function authMiddleware(
     res.status(401).json({
       error: "Missing or invalid authorization header.",
       code: "UNAUTHORIZED",
+      requestId: (req as any).requestId,
     });
     return;
   }
@@ -88,13 +92,14 @@ export function authMiddleware(
   const token = authHeader.split(" ")[1];
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as AuthUser;
+    const decoded = jwt.verify(token, getJwtSecret()) as AuthUser;
     (req as any).user = decoded; // Attach user to request
     next();
   } catch (error) {
     res.status(401).json({
       error: "Invalid or expired authorization token.",
       code: "UNAUTHORIZED",
+      requestId: (req as any).requestId,
     });
   }
 }

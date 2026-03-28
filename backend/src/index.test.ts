@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, beforeAll } from "vitest";
+import request from "supertest";
+import jwt from "jsonwebtoken";
 
 const streamStoreMocks = vi.hoisted(() => ({
   calculateProgress: vi.fn(),
@@ -22,7 +24,13 @@ const eventHistoryMocks = vi.hoisted(() => ({
 vi.mock("./services/streamStore", () => streamStoreMocks);
 vi.mock("./services/eventHistory", () => eventHistoryMocks);
 
+const TEST_JWT_SECRET = "test_secret_for_integration";
+
 import { app } from "./index";
+
+beforeAll(() => {
+  vi.stubEnv("JWT_SECRET", TEST_JWT_SECRET);
+});
 
 type TestStream = {
   id: string;
@@ -448,5 +456,128 @@ describe("GET /api/events", () => {
       actor: "GSENDER",
       amount: 50,
     });
+  });
+});
+
+describe("Protected Routes - Authentication Integration", () => {
+  const testAccountId = "GBVWD767T7RMTN6Y5Z6X3B2Y2Z6X3B2Y2Z6X3B2Y2Z6X3B2Y2Z6X3B2Y";
+
+  it("rejects POST /api/streams when unauthorized (missing token)", async () => {
+    const response = await request(app).post("/api/streams").send({});
+    
+    expect(response.status).toBe(401);
+    expect(response.body).toEqual({
+      error: "Missing or invalid authorization header.",
+      code: "UNAUTHORIZED",
+    });
+  });
+
+  it("rejects POST /api/streams/:id/cancel when unauthorized (invalid token)", async () => {
+    const response = await request(app)
+      .post("/api/streams/1/cancel")
+      .set("Authorization", "Bearer invalid-token");
+    
+    expect(response.status).toBe(401);
+    expect(response.body.code).toBe("UNAUTHORIZED");
+  });
+
+  it("rejects PATCH /api/streams/:id/start-time when unauthorized (missing token)", async () => {
+    const response = await request(app)
+      .patch("/api/streams/1/start-time")
+      .send({ startAt: Math.floor(Date.now() / 1000) + 3600 });
+    
+    expect(response.status).toBe(401);
+  });
+
+  it("allows access to protected routes with a valid token", async () => {
+    const token = jwt.sign({ accountId: streams[0].sender }, TEST_JWT_SECRET, { expiresIn: "1h" });
+    
+    // Mocking the underlying service response so the route logic doesn't fail
+    streamStoreMocks.getStream.mockReturnValue(streams[0]);
+    streamStoreMocks.cancelStream.mockResolvedValue({ ...streams[0], canceledAt: 12345 });
+
+    const response = await request(app)
+      .post("/api/streams/4/cancel")
+      .set("Authorization", `Bearer ${token}`);
+    
+    expect(response.status).toBe(200);
+  });
+
+  it("allows POST /api/streams with a valid token and matching sender", async () => {
+    const token = jwt.sign({ accountId: testAccountId }, TEST_JWT_SECRET, { expiresIn: "1h" });
+    const payload = {
+      sender: testAccountId,
+      recipient: "GRECIPIENT111",
+      assetCode: "USDC",
+      totalAmount: 100,
+      durationSeconds: 3600,
+    };
+
+    streamStoreMocks.createStream.mockResolvedValue({
+      id: "5",
+      ...payload,
+      createdAt: Math.floor(Date.now() / 1000),
+      startAt: Math.floor(Date.now() / 1000),
+    });
+
+    const response = await request(app)
+      .post("/api/streams")
+      .set("Authorization", `Bearer ${token}`)
+      .send(payload);
+    
+    expect(response.status).toBe(201);
+    expect(response.body.data.id).toBe("5");
+  });
+
+  it("allows PATCH /api/streams/:id/start-time with a valid token and owner", async () => {
+    const token = jwt.sign({ accountId: streams[0].sender }, TEST_JWT_SECRET, { expiresIn: "1h" });
+    const newStartAt = Math.floor(Date.now() / 1000) + 7200;
+
+    streamStoreMocks.getStream.mockReturnValue(streams[0]);
+    streamStoreMocks.updateStreamStartAt.mockReturnValue({
+      ...streams[0],
+      startAt: newStartAt,
+    });
+
+    const response = await request(app)
+      .patch("/api/streams/4/start-time")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ startAt: newStartAt });
+    
+    expect(response.status).toBe(200);
+    expect(response.body.data.startAt).toBe(newStartAt);
+  });
+
+  it("rejects POST /api/streams when token accountId does not match sender (403)", async () => {
+    const token = jwt.sign({ accountId: "WRONG_SENDER" }, TEST_JWT_SECRET, { expiresIn: "1h" });
+    const payload = {
+      sender: testAccountId,
+      recipient: "GRECIPIENT111",
+      assetCode: "USDC",
+      totalAmount: 100,
+      durationSeconds: 3600,
+    };
+
+    const response = await request(app)
+      .post("/api/streams")
+      .set("Authorization", `Bearer ${token}`)
+      .send(payload);
+    
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe("FORBIDDEN");
+  });
+
+  it("rejects cancellation of a stream owned by another user (403)", async () => {
+    const token = jwt.sign({ accountId: "NOT_THE_OWNER" }, TEST_JWT_SECRET, { expiresIn: "1h" });
+    
+    // stream 4 is owned by GSENDERAAAA
+    streamStoreMocks.getStream.mockReturnValue(streams[0]);
+
+    const response = await request(app)
+      .post("/api/streams/4/cancel")
+      .set("Authorization", `Bearer ${token}`);
+    
+    expect(response.status).toBe(403);
+    expect(response.body.error).toContain("Only the stream sender can cancel");
   });
 });

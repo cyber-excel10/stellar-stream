@@ -21,6 +21,12 @@ import {
   updateStreamStartAt,
 } from "./services/streamStore";
 import {
+  getGlobalEvents,
+  countAllEvents,
+  getStreamHistory,
+  getAllEvents,
+} from "./services/eventHistory";
+import {
   authMiddleware,
   generateChallenge,
   verifyChallengeAndIssueToken,
@@ -279,7 +285,11 @@ app.post("/api/auth/token", (req: Request, res: Response) => {
     const token = verifyChallengeAndIssueToken(transaction);
     res.json({ token });
   } catch (error: any) {
-    res.status(401).json({ error: error.message, requestId: req.requestId });
+    res.status(401).json({
+      error: error.message,
+      code: "UNAUTHORIZED",
+      requestId: req.requestId,
+    });
   }
 });
 
@@ -289,6 +299,16 @@ app.post("/api/streams", authMiddleware, async (req: Request, res: Response) => 
   );
   if (!parsedBody.success) {
     sendValidationError(res, parsedBody.error.issues);
+    return;
+  }
+
+  const user = (req as any).user;
+  if (user && parsedBody.data.sender !== user.accountId) {
+    res.status(403).json({
+      error: "Authenticated account ID does not match stream sender.",
+      code: "FORBIDDEN",
+      requestId: req.requestId,
+    });
     return;
   }
 
@@ -320,12 +340,26 @@ app.post(
     }
 
     try {
-      const stream = await cancelStream(parsedId.value);
-      if (!stream) {
-        res.status(404).json({ error: "Stream not found.", requestId: req.requestId });
+      const existingStream = getStream(parsedId.value);
+      if (!existingStream) {
+        res
+          .status(404)
+          .json({ error: "Stream not found.", requestId: req.requestId });
         return;
       }
-      res.json({ data: { ...stream, progress: calculateProgress(stream) } });
+
+      const user = (req as any).user;
+      if (user && existingStream.sender !== user.accountId) {
+        res.status(403).json({
+          error: "Only the stream sender can cancel this stream.",
+          code: "FORBIDDEN",
+          requestId: req.requestId,
+        });
+        return;
+      }
+
+      const stream = await cancelStream(parsedId.value);
+      res.json({ data: { ...stream, progress: calculateProgress(stream!) } });
     } catch (error: any) {
       console.error("Failed to cancel stream:", error);
       res.status(500).json({ error: error.message || "Failed to cancel stream." });
@@ -340,6 +374,24 @@ app.patch(
     const parsedId = parseStreamId(req.params.id);
     if (!parsedId.ok) {
       sendValidationError(res, parsedId.issues);
+      return;
+    }
+
+    const existingStream = getStream(parsedId.value);
+    if (!existingStream) {
+      res
+        .status(404)
+        .json({ error: "Stream not found.", requestId: req.requestId });
+      return;
+    }
+
+    const user = (req as any).user;
+    if (user && existingStream.sender !== user.accountId) {
+      res.status(403).json({
+        error: "Only the stream sender can update the start time.",
+        code: "FORBIDDEN",
+        requestId: req.requestId,
+      });
       return;
     }
 
@@ -418,10 +470,6 @@ app.get("/api/open-issues", async (_req: Request, res: Response) => {
     console.error("Failed to fetch open issues from proxy:", error);
     res.status(500).json({ error: error.message || "Failed to fetch open issues." });
   }
-});
-
-app.get("/api/events", (_req: Request, res: Response) => {
-  res.json({ data: getAllEvents(50) });
 });
 
 
