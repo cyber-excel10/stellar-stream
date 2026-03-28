@@ -6,6 +6,7 @@ import {
 } from "@stellar/stellar-sdk";
 import jwt from "jsonwebtoken";
 import { Request, Response, NextFunction } from "express";
+import { sendApiError } from "../apiErrors";
 
 const JWT_SECRET = process.env.JWT_SECRET || "default_local_dev_secret_key";
 const SERVER_SIGNING_KEY =
@@ -78,8 +79,7 @@ export function authMiddleware(
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    res.status(401).json({
-      error: "Missing or invalid authorization header.",
+    sendApiError(req, res, 401, "Missing or invalid authorization header.", {
       code: "UNAUTHORIZED",
     });
     return;
@@ -92,8 +92,7 @@ export function authMiddleware(
     (req as any).user = decoded; // Attach user to request
     next();
   } catch (error) {
-    res.status(401).json({
-      error: "Invalid or expired authorization token.",
+    sendApiError(req, res, 401, "Invalid or expired authorization token.", {
       code: "UNAUTHORIZED",
     });
   }
