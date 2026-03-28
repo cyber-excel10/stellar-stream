@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Stream } from "../types/stream";
 import { getExportCsvUrl, ListStreamsFilters } from "../services/api";
 import { StreamTimeline } from "./StreamTimeline";
@@ -27,8 +27,28 @@ function formatTimestamp(unixSeconds: number): string {
   return new Date(unixSeconds * 1000).toLocaleString();
 }
 
+function FilterBar({ filters, onChange }: { 
+  filters: ListStreamsFilters, 
+  onChange: (f: ListStreamsFilters) => void 
+}) {
+  return (
+    <div className="filter-bar">
+      <select 
+        value={filters.status || ""} 
+        onChange={(e) => onChange({ ...filters, status: e.target.value })}
+      >
+        <option value="">All Statuses</option>
+        {VALID_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+      </select>
+    </div>
+  );
+}
 
-  }
+export function StreamsTable({ streams, filters, onFiltersChange, onCancel, onEditStartTime }: StreamsTableProps) {
+  const [expandedStreamId, setExpandedStreamId] = useState<string | null>(null);
+  const exportUrl = useMemo(() => getExportCsvUrl(filters), [filters]);
+
+  const toggleTimeline = (id: string) => setExpandedStreamId(expandedStreamId === id ? null : id);
 
   const header = (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>

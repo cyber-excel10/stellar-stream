@@ -4,6 +4,7 @@ import { EditStartTimeModal } from "./components/EditStartTimeModal";
 import { IssueBacklog } from "./components/IssueBacklog";
 import { RecipientDashboard } from "./components/RecipientDashboard";
 import { StreamsTable } from "./components/StreamsTable";
+import { SenderDashboard } from "./components/SenderDashboard";
 import { StreamMetricsChart } from "./components/StreamMetricsChart";
 import { WalletButton } from "./components/WalletButton";
 import { StreamTimeline } from "./components/StreamTimeline";
@@ -19,7 +20,7 @@ import { OpenIssue, Stream } from "./types/stream";
 import { useMetricsHistory } from "./hooks/useMetricsHistory";
 import { useUrlFilters } from "./hooks/useUrlFilters";
 
-type ViewMode = "dashboard" | "recipient";
+type ViewMode = "dashboard" | "recipient" | "sender";
 
 // Derive a user-friendly hint string for global (non-form) errors.
 function describeGlobalError(raw: string): string {
@@ -53,14 +54,33 @@ function App() {
 useEffect(() => {
   let active = true;
 
-
+  async function bootstrap() {
+    setLoadingDashboard(true);
+    try {
+      const [streamData, issueData] = await Promise.all([
+        listStreams(filters),
+        listOpenIssues(),
+      ]);
+      if (active) {
+        setStreams(streamData);
+        setIssues(issueData);
+      }
+    } catch (err) {
+      if (active) {
+        setGlobalError(
+          err instanceof Error ? err.message : "Failed to load dashboard data.",
+        );
+      }
+    } finally {
+      if (active) setLoadingDashboard(false);
     }
   }
 
   void bootstrap();
 
   const timer = window.setInterval(async () => {
-    if (!active) return;
+    // Only poll for the main dashboard list if we are actually viewing it
+    if (!active || viewMode !== "dashboard") return;
     try {
       const data = await listStreams(filters);
       if (active) setStreams(data);
@@ -130,12 +150,12 @@ async function handleCancel(streamId: string): Promise<void> {
   }
 }
 
-  async function handleUpdateStartTime(
+async function handleUpdateStartTime(
   streamId: string,
   newStartAt: number,
 ): Promise<void> {
   await updateStreamStartAt(streamId, newStartAt);
-  const data = await listStreams(filters); 
+  const data = await listStreams(filters);
   setStreams(data);
 }
 
@@ -165,6 +185,13 @@ async function handleCancel(streamId: string): Promise<void> {
         </button>
         <button
           type="button"
+          className={`app-nav-link ${viewMode === "sender" ? "app-nav-link--active" : ""}`}
+          onClick={() => setViewMode("sender")}
+        >
+          Sender dashboard
+        </button>
+        <button
+          type="button"
           className={`app-nav-link ${viewMode === "recipient" ? "app-nav-link--active" : ""}`}
           onClick={() => setViewMode("recipient")}
         >
@@ -172,7 +199,12 @@ async function handleCancel(streamId: string): Promise<void> {
         </button>
       </nav>
 
-      {viewMode === "recipient" ? (
+      {viewMode === "sender" ? (
+        <SenderDashboard 
+          senderAddress={wallet.address} 
+          onEditStartTime={(stream) => setEditingStream(stream)}
+        />
+      ) : viewMode === "recipient" ? (
         <RecipientDashboard recipientAddress={wallet.address} />
       ) : (
         <>
