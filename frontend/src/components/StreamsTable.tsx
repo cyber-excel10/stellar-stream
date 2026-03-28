@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { Stream } from "../types/stream";
 import { getExportCsvUrl, ListStreamsFilters } from "../services/api";
+import { CopyableAddress } from "./CopyableAddress";
 import { StreamTimeline } from "./StreamTimeline";
-
+import { getHealthBadges } from "../utils/streamHealthBadges";
 
 interface StreamsTableProps {
   streams: Stream[];
@@ -11,13 +12,6 @@ interface StreamsTableProps {
   onCancel: (streamId: string) => Promise<void>;
   onEditStartTime: (stream: Stream) => void;
 }
-
-const VALID_STATUSES = [
-  "active",
-  "scheduled",
-  "completed",
-  "canceled",
-] as const;
 
 function statusClass(status: Stream["progress"]["status"]): string {
   switch (status) {
@@ -38,26 +32,14 @@ function formatTimestamp(unixSeconds: number): string {
   return new Date(unixSeconds * 1000).toLocaleString();
 }
 
-
-
+export function StreamsTable({
+  streams,
+  filters,
+  onFiltersChange: _onFiltersChange,
+  onCancel,
+  onEditStartTime,
+}: StreamsTableProps) {
   const exportUrl = getExportCsvUrl(filters as Record<string, string>);
-
-  const header = (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        marginBottom: "1rem",
-      }}
-    >
-      <h2 style={{ margin: 0 }}>Live Streams</h2>
-      {/* <a href={exportUrl} className="btn-ghost" download>
-        Export CSV
-      </a> */}
-    </div>
-  );
-
   const [expandedStreamId, setExpandedStreamId] = useState<string | null>(null);
 
   const toggleTimeline = (streamId: string) => {
@@ -66,8 +48,19 @@ function formatTimestamp(unixSeconds: number): string {
 
   return (
     <div className="card">
-      {header}
-      {/* <FilterBar filters={filters} onChange={onFiltersChange} /> */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: "1rem",
+        }}
+      >
+        <h2 style={{ margin: 0 }}>Live Streams</h2>
+        <a href={exportUrl} className="btn-ghost" download>
+          Export CSV
+        </a>
+      </div>
 
       {streams.length === 0 ? (
         <p className="muted">No streams match your filters.</p>
@@ -92,12 +85,11 @@ function formatTimestamp(unixSeconds: number): string {
                   stream.progress.status === "canceled";
                 const isExpanded = expandedStreamId === stream.id;
 
-                // Derive health badges for this stream
                 const healthBadges = getHealthBadges(stream);
 
                 return (
-                  <>
-                    <tr key={stream.id}>
+                  <Fragment key={stream.id}>
+                    <tr id={`stream-${stream.id}`}>
                       <td>
                         <button
                           type="button"
@@ -107,7 +99,7 @@ function formatTimestamp(unixSeconds: number): string {
                           onClick={() => toggleTimeline(stream.id)}
                           title={isExpanded ? "Hide timeline" : "Show timeline"}
                         >
-                          {isExpanded ? "▲" : "▼"} {stream.id}
+                          {isExpanded ? "^" : "v"} {stream.id}
                         </button>
                       </td>
                       <td>
@@ -139,23 +131,25 @@ function formatTimestamp(unixSeconds: number): string {
                         <div className="progress-bar" aria-hidden>
                           <div
                             style={{
-                              width: `${Math.min(stream.progress.percentComplete, 100)}%`,
+                              width: `${Math.min(
+                                stream.progress.percentComplete,
+                                100,
+                              )}%`,
                             }}
                           />
                         </div>
                       </td>
                       <td>
-                        {/*
-                         * Status cell: core status label first, then health
-                         * badges below. Badges are purely additive and never
-                         * replace the status label.
-                         */}
                         <div className="status-cell">
                           <span className={statusClass(stream.progress.status)}>
                             {stream.progress.status}
                           </span>
                           {healthBadges.length > 0 && (
-                            <div className="health-badge-row" role="list" aria-label="Health badges">
+                            <div
+                              className="health-badge-row"
+                              role="list"
+                              aria-label="Health badges"
+                            >
                               {healthBadges.map((badge) => (
                                 <span
                                   key={badge.key}
@@ -179,7 +173,7 @@ function formatTimestamp(unixSeconds: number): string {
                               title="Edit start time"
                               onClick={() => onEditStartTime(stream)}
                             >
-                              ✏️ Edit
+                              Edit
                             </button>
                           )}
                           <button
@@ -195,10 +189,7 @@ function formatTimestamp(unixSeconds: number): string {
                     </tr>
 
                     {isExpanded && (
-                      <tr
-                        key={`timeline-${stream.id}`}
-                        id={`timeline-${stream.id}`}
-                      >
+                      <tr key={`timeline-${stream.id}`} id={`timeline-${stream.id}`}>
                         <td
                           colSpan={6}
                           style={{
@@ -210,7 +201,7 @@ function formatTimestamp(unixSeconds: number): string {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 );
               })}
             </tbody>
@@ -219,4 +210,4 @@ function formatTimestamp(unixSeconds: number): string {
       )}
     </div>
   );
-};
+}
